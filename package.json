@@ -1,0 +1,93 @@
+{
+  "name": "calm-claude",
+  "productName": "Calm Claude",
+  "version": "1.0.0",
+  "description": "A calm interface for Claude Code",
+  "author": {
+    "name": "Ravin",
+    "email": "ravinsarwar08@gmail.com"
+  },
+  "homepage": "https://github.com/Ravin022/calm-claude",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:icons": "node scripts/build-icons.js",
+    "build:patch7za": "node scripts/patch-7za.js",
+    "prebuild": "npm run build:icons && npm run build:patch7za",
+    "pack": "npm run prebuild && electron-builder --dir",
+    "dist": "npm run prebuild && electron-builder",
+    "release": "npm run prebuild && electron-builder --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.8.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron-updater": "^6.8.3",
+    "node-pty": "^1.1.0"
+  },
+  "build": {
+    "appId": "com.ravin.calmclaude",
+    "productName": "Calm Claude",
+    "copyright": "Copyright © 2026 Ravin",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "build/icon.ico",
+      "build/icon.png",
+      "build/splash-full.png",
+      "!**/*.map",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,.DS_Store}",
+      "!**/node_modules/*/{test,tests,__tests__,example,examples,docs,doc,.github}",
+      "!**/node_modules/*.d.ts"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**/*",
+      "node_modules/@xterm/**/*"
+    ],
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Calm-Claude-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Calm Claude",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Ravin022",
+        "repo": "calm-claude",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

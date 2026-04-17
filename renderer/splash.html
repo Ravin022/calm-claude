@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:; script-src 'self';" />
+  <title>Calm Claude</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+      -webkit-app-region: drag;
+      user-select: none;
+      background: transparent;
+    }
+    .card {
+      position: absolute;
+      inset: 0;
+      border-radius: 22px;
+      overflow: hidden;
+      background:
+        radial-gradient(600px 400px at 20% 0%, #f0d9c4 0%, transparent 55%),
+        radial-gradient(500px 400px at 110% 20%, #f3cfd6 0%, transparent 50%),
+        radial-gradient(700px 500px at 50% 120%, #d8cfe6 0%, transparent 55%),
+        linear-gradient(180deg, #f6efe6 0%, #efe5d6 100%);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.8) inset,
+        0 24px 60px -20px rgba(80, 60, 90, 0.45),
+        0 4px 12px -4px rgba(80, 60, 90, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 40px 48px 30px;
+      animation: fadeIn 0.35s ease-out both;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    body.out .card { animation: fadeOut 0.28s ease-in forwards; }
+    @keyframes fadeOut {
+      to { opacity: 0; transform: scale(0.98); }
+    }
+
+    .logo {
+      width: 160px;
+      height: 160px;
+      -webkit-user-drag: none;
+      filter: drop-shadow(0 10px 22px rgba(166, 120, 71, 0.25));
+      animation: float 2.4s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-4px); }
+    }
+
+    .wordmark {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      color: #a67847;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .wordmark span { color: #c89a6b; font-weight: 500; }
+
+    .by {
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #9b94a8;
+      margin-top: 2px;
+    }
+
+    .loading {
+      margin-top: 14px;
+      width: 160px;
+      height: 2px;
+      border-radius: 2px;
+      background: rgba(166, 120, 71, 0.18);
+      overflow: hidden;
+      position: relative;
+    }
+    .loading::before {
+      content: "";
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 40%;
+      background: linear-gradient(90deg, transparent, #c89a6b, transparent);
+      animation: sweep 1.2s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0%   { left: -40%; }
+      100% { left: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="../build/icon.png" alt="Calm Claude" />
+    <div class="wordmark">CALM <span>CLAUDE</span></div>
+    <div class="by">by ravin</div>
+    <div class="loading"></div>
+  </div>
+  <script>
+    window.addEventListener('message', (e) => {
+      if (e.data === 'fade-out') document.body.classList.add('out');
+    });
+  </script>
+</body>
+</html>
