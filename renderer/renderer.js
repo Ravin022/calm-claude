@@ -46,33 +46,69 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
 }
 
-/* ============ Terminal theme (matches app palette) ============ */
-const theme = {
-  background: 'rgba(0,0,0,0)',
-  foreground: '#2a2330',
-  cursor: '#a67847',
-  cursorAccent: '#f6efe6',
-  selectionBackground: 'rgba(150, 120, 180, 0.35)',
-  selectionForeground: undefined,
-
-  black: '#3a3340',
-  red: '#c04a3e',
-  green: '#6b8e4a',
-  yellow: '#c89a6b',
-  blue: '#6b7fa8',
-  magenta: '#a07aa8',
-  cyan: '#5a8a95',
-  white: '#e8dfd1',
-
-  brightBlack: '#6b6378',
-  brightRed: '#d97f6a',
-  brightGreen: '#8eaa63',
-  brightYellow: '#d4b07a',
-  brightBlue: '#8aa0c2',
-  brightMagenta: '#b898c0',
-  brightCyan: '#7aa8b2',
-  brightWhite: '#faf5ef'
+/* ============ Theme palettes ============ */
+const THEMES = {
+  light: {
+    background: 'rgba(0,0,0,0)',
+    foreground: '#2a2330',
+    cursor: '#a67847',
+    cursorAccent: '#f6efe6',
+    selectionBackground: 'rgba(150, 120, 180, 0.35)',
+    black: '#3a3340',
+    red: '#c04a3e',
+    green: '#6b8e4a',
+    yellow: '#c89a6b',
+    blue: '#6b7fa8',
+    magenta: '#a07aa8',
+    cyan: '#5a8a95',
+    white: '#e8dfd1',
+    brightBlack: '#6b6378',
+    brightRed: '#d97f6a',
+    brightGreen: '#8eaa63',
+    brightYellow: '#d4b07a',
+    brightBlue: '#8aa0c2',
+    brightMagenta: '#b898c0',
+    brightCyan: '#7aa8b2',
+    brightWhite: '#faf5ef'
+  },
+  dark: {
+    background: 'rgba(0,0,0,0)',
+    foreground: '#e8dfd1',
+    cursor: '#e8be8a',
+    cursorAccent: '#1a1520',
+    selectionBackground: 'rgba(200, 170, 220, 0.28)',
+    black: '#3a3340',
+    red: '#e88273',
+    green: '#a8c78a',
+    yellow: '#e8c088',
+    blue: '#9ab0d2',
+    magenta: '#c5a5cd',
+    cyan: '#88b5c0',
+    white: '#e8dfd1',
+    brightBlack: '#7a7288',
+    brightRed: '#f59e8a',
+    brightGreen: '#c2dca0',
+    brightYellow: '#f0d3a0',
+    brightBlue: '#b0c5e0',
+    brightMagenta: '#d8bde0',
+    brightCyan: '#a8cfd8',
+    brightWhite: '#faf5ef'
+  }
 };
+
+const THEME_KEY = 'calm-claude:theme';
+function getTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  return saved === 'dark' ? 'dark' : 'light';
+}
+function applyTheme(name) {
+  document.body.setAttribute('data-theme', name);
+  localStorage.setItem(THEME_KEY, name);
+  if (window.__term) {
+    window.__term.options.theme = THEMES[name];
+  }
+}
+applyTheme(getTheme());
 
 /* ============ xterm init ============ */
 const term = new Terminal({
@@ -87,8 +123,9 @@ const term = new Terminal({
   allowTransparency: true,
   scrollback: 5000,
   macOptionIsMeta: true,
-  theme
+  theme: THEMES[getTheme()]
 });
+window.__term = term;
 
 const fitAddon = new FitAddon.FitAddon();
 term.loadAddon(fitAddon);
@@ -98,6 +135,79 @@ try {
 } catch {}
 
 term.open($('#terminal'));
+
+/* ============ Copy / paste ============ */
+async function copySelection() {
+  const sel = term.getSelection();
+  if (!sel) return false;
+  try {
+    await navigator.clipboard.writeText(sel);
+    toast('Copied');
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = sel;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      toast('Copied');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+async function pasteClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) term.paste(text);
+  } catch {}
+}
+
+term.attachCustomKeyEventHandler((e) => {
+  if (e.type !== 'keydown') return true;
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return true;
+
+  const key = e.key.toLowerCase();
+
+  if (key === 'c' && e.shiftKey) {
+    copySelection();
+    return false;
+  }
+  if (key === 'c' && !e.shiftKey) {
+    if (term.hasSelection()) {
+      copySelection();
+      term.clearSelection();
+      return false;
+    }
+    return true;
+  }
+  if (key === 'v') {
+    pasteClipboard();
+    return false;
+  }
+  if (key === 'a' && e.shiftKey) {
+    term.selectAll();
+    return false;
+  }
+  return true;
+});
+
+$('#terminal').addEventListener('contextmenu', async (e) => {
+  e.preventDefault();
+  if (term.hasSelection()) {
+    await copySelection();
+    term.clearSelection();
+  } else {
+    await pasteClipboard();
+  }
+});
 
 function fit() {
   try {
@@ -160,6 +270,13 @@ async function changeFolder() {
 
 $('#folder-pill').addEventListener('click', changeFolder);
 
+/* ============ Theme toggle ============ */
+$('#theme-toggle').addEventListener('click', () => {
+  const next = getTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  toast(next === 'dark' ? 'Dark' : 'Light');
+});
+
 /* ============ Restart ============ */
 $('#restart').addEventListener('click', async () => {
   await api.pty.kill();
@@ -179,6 +296,10 @@ window.addEventListener('keydown', (e) => {
   if (mod && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
     e.preventDefault();
     $('#restart').click();
+  }
+  if (mod && e.shiftKey && (e.key === 'T' || e.key === 't')) {
+    e.preventDefault();
+    $('#theme-toggle').click();
   }
 });
 

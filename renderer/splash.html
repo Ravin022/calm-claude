@@ -37,6 +37,24 @@
       padding: 40px 48px 30px;
       animation: fadeIn 0.35s ease-out both;
     }
+    body[data-theme="dark"] .card {
+      background:
+        radial-gradient(600px 400px at 20% 0%, #3a2620 0%, transparent 55%),
+        radial-gradient(500px 400px at 110% 20%, #382030 0%, transparent 50%),
+        radial-gradient(700px 500px at 50% 120%, #23203a 0%, transparent 55%),
+        linear-gradient(180deg, #1a1520 0%, #120f18 100%);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.04) inset,
+        0 24px 60px -20px rgba(0, 0, 0, 0.75),
+        0 4px 12px -4px rgba(0, 0, 0, 0.5);
+    }
+    body[data-theme="dark"] .wordmark { color: #e8be8a; }
+    body[data-theme="dark"] .wordmark span { color: #d4a978; }
+    body[data-theme="dark"] .by { color: #7a7178; }
+    body[data-theme="dark"] .loading { background: rgba(212, 169, 120, 0.14); }
+    body[data-theme="dark"] .loading::before {
+      background: linear-gradient(90deg, transparent, #e8be8a, transparent);
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: scale(0.96); }
       to { opacity: 1; transform: scale(1); }
@@ -107,6 +125,10 @@
     <div class="loading"></div>
   </div>
   <script>
+    try {
+      const saved = localStorage.getItem('calm-claude:theme');
+      if (saved === 'dark') document.body.setAttribute('data-theme', 'dark');
+    } catch {}
     window.addEventListener('message', (e) => {
       if (e.data === 'fade-out') document.body.classList.add('out');
     });
