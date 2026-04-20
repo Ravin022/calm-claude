@@ -188,10 +188,6 @@ term.attachCustomKeyEventHandler((e) => {
     }
     return true;
   }
-  if (key === 'v') {
-    pasteClipboard();
-    return false;
-  }
   if (key === 'a' && e.shiftKey) {
     term.selectAll();
     return false;
