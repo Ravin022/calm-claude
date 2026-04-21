@@ -11,10 +11,10 @@ contextBridge.exposeInMainWorld('api', {
   },
   pty: {
     start: (opts) => ipcRenderer.invoke('pty:start', opts || {}),
-    write: (data) => ipcRenderer.send('pty:write', data),
-    resize: (cols, rows) => ipcRenderer.send('pty:resize', { cols, rows }),
-    kill: () => ipcRenderer.invoke('pty:kill'),
-    onData: (cb) => ipcRenderer.on('pty:data', (_e, data) => cb(data)),
+    write: (tabId, data) => ipcRenderer.send('pty:write', { tabId, data }),
+    resize: (tabId, cols, rows) => ipcRenderer.send('pty:resize', { tabId, cols, rows }),
+    kill: (tabId) => ipcRenderer.invoke('pty:kill', { tabId }),
+    onData: (cb) => ipcRenderer.on('pty:data', (_e, payload) => cb(payload)),
     onExit: (cb) => ipcRenderer.on('pty:exit', (_e, info) => cb(info))
   },
   dialog: {

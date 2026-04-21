@@ -18,7 +18,7 @@ try {
 
 let mainWindow;
 let splashWindow;
-let ptyProcess = null;
+const ptyProcesses = new Map();
 
 const isWindows = process.platform === 'win32';
 const ICON_PATH = path.join(__dirname, 'build', 'icon.png');
@@ -186,10 +186,10 @@ function createWindow() {
   mainWindow.on('blur', () => mainWindow.webContents.send('window:focus', false));
 
   mainWindow.on('closed', () => {
-    if (ptyProcess) {
-      try { ptyProcess.kill(); } catch {}
-      ptyProcess = null;
+    for (const [, p] of ptyProcesses) {
+      try { p.kill(); } catch {}
     }
+    ptyProcesses.clear();
     mainWindow = null;
   });
 }
@@ -249,47 +249,55 @@ ipcMain.handle('window:maximize', () => {
 ipcMain.handle('window:close', () => mainWindow?.close());
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
 
-ipcMain.handle('pty:start', (_evt, { cols, rows, cwd } = {}) => {
+ipcMain.handle('pty:start', (_evt, { tabId, cols, rows, cwd } = {}) => {
+  if (!tabId) return { ok: false, error: 'tabId required' };
+
   if (ptyLoadError) {
     const msg = `\r\n\x1b[31mnode-pty failed to load: ${ptyLoadError.message}\x1b[0m\r\n`;
-    mainWindow?.webContents.send('pty:data', msg);
+    mainWindow?.webContents.send('pty:data', { tabId, data: msg });
     return { ok: false, error: ptyLoadError.message };
   }
 
-  if (ptyProcess) {
-    try { ptyProcess.kill(); } catch {}
-    ptyProcess = null;
+  const existing = ptyProcesses.get(tabId);
+  if (existing) {
+    try { existing.kill(); } catch {}
+    ptyProcesses.delete(tabId);
   }
 
+  let p;
   try {
-    ptyProcess = spawnClaudePty(cols, rows, cwd);
+    p = spawnClaudePty(cols, rows, cwd);
   } catch (err) {
     const msg = `\r\n\x1b[31mFailed to start claude: ${err.message}\x1b[0m\r\n\x1b[2mIs the claude CLI installed and on PATH?\x1b[0m\r\n`;
-    mainWindow?.webContents.send('pty:data', msg);
+    mainWindow?.webContents.send('pty:data', { tabId, data: msg });
     return { ok: false, error: err.message };
   }
 
-  ptyProcess.onData((data) => {
-    mainWindow?.webContents.send('pty:data', data);
+  ptyProcesses.set(tabId, p);
+
+  p.onData((data) => {
+    mainWindow?.webContents.send('pty:data', { tabId, data });
   });
 
-  ptyProcess.onExit(({ exitCode, signal }) => {
-    mainWindow?.webContents.send('pty:exit', { exitCode, signal });
-    ptyProcess = null;
+  p.onExit(({ exitCode, signal }) => {
+    mainWindow?.webContents.send('pty:exit', { tabId, exitCode, signal });
+    ptyProcesses.delete(tabId);
   });
 
-  return { ok: true, pid: ptyProcess.pid };
+  return { ok: true, pid: p.pid };
 });
 
-ipcMain.on('pty:write', (_evt, data) => {
-  if (ptyProcess) {
-    try { ptyProcess.write(data); } catch {}
+ipcMain.on('pty:write', (_evt, { tabId, data }) => {
+  const p = ptyProcesses.get(tabId);
+  if (p) {
+    try { p.write(data); } catch {}
   }
 });
 
-ipcMain.on('pty:resize', (_evt, { cols, rows }) => {
-  if (ptyProcess && cols > 0 && rows > 0) {
-    try { ptyProcess.resize(cols, rows); } catch {}
+ipcMain.on('pty:resize', (_evt, { tabId, cols, rows }) => {
+  const p = ptyProcesses.get(tabId);
+  if (p && cols > 0 && rows > 0) {
+    try { p.resize(cols, rows); } catch {}
   }
 });
 
@@ -322,11 +330,19 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
-ipcMain.handle('pty:kill', () => {
-  if (ptyProcess) {
-    try { ptyProcess.kill(); } catch {}
-    ptyProcess = null;
-    return true;
+ipcMain.handle('pty:kill', (_evt, { tabId } = {}) => {
+  if (tabId) {
+    const p = ptyProcesses.get(tabId);
+    if (p) {
+      try { p.kill(); } catch {}
+      ptyProcesses.delete(tabId);
+      return true;
+    }
+    return false;
   }
-  return false;
+  for (const [, p] of ptyProcesses) {
+    try { p.kill(); } catch {}
+  }
+  ptyProcesses.clear();
+  return true;
 });

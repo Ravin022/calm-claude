@@ -18,9 +18,16 @@
     </div>
     <div class="title">Calm Claude</div>
     <div class="titlebar-right">
-      <button class="folder-pill" id="folder-pill" title="Change working directory">
-        <svg class="fp-icon" viewBox="0 0 16 16" width="12" height="12"><path d="M1.5 4.5 C1.5 3.7 2.2 3 3 3 L6 3 L7.5 4.5 L13 4.5 C13.8 4.5 14.5 5.2 14.5 6 L14.5 11.5 C14.5 12.3 13.8 13 13 13 L3 13 C2.2 13 1.5 12.3 1.5 11.5 Z" fill="currentColor" opacity="0.85"/></svg>
-        <span class="fp-name" id="folder-name">~</span>
+      <div class="folder-wrap">
+        <button class="folder-pill" id="folder-pill" title="Change working directory">
+          <svg class="fp-icon" viewBox="0 0 16 16" width="12" height="12"><path d="M1.5 4.5 C1.5 3.7 2.2 3 3 3 L6 3 L7.5 4.5 L13 4.5 C13.8 4.5 14.5 5.2 14.5 6 L14.5 11.5 C14.5 12.3 13.8 13 13 13 L3 13 C2.2 13 1.5 12.3 1.5 11.5 Z" fill="currentColor" opacity="0.85"/></svg>
+          <span class="fp-name" id="folder-name">~</span>
+          <svg class="fp-caret" viewBox="0 0 10 10" width="8" height="8"><path d="M2 4 L5 7 L8 4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+        </button>
+        <div class="folder-menu" id="folder-menu"></div>
+      </div>
+      <button class="icon-btn composer-toggle" id="composer-toggle" title="Toggle composer">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M3 4 C3 3.2 3.7 2.5 4.5 2.5 L11.5 2.5 C12.3 2.5 13 3.2 13 4 L13 9 C13 9.8 12.3 10.5 11.5 10.5 L7 10.5 L4.5 13 L4.5 10.5 C3.7 10.5 3 9.8 3 9 Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
       </button>
       <button class="icon-btn theme-toggle" id="theme-toggle" title="Toggle theme">
         <svg class="theme-icon-moon" viewBox="0 0 16 16" fill="none"><path d="M12.5 9.5 A5 5 0 0 1 6.5 3.5 A5 5 0 1 0 12.5 9.5 Z" fill="currentColor"/></svg>
@@ -32,8 +39,29 @@
 
   <main class="shell">
     <section class="terminal-wrap">
+      <div class="tab-bar">
+        <div class="tabs" id="tabs"></div>
+        <button class="tab-new" id="tab-new" title="New tab (Ctrl+T)" aria-label="New tab">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 3.5 L8 12.5 M3.5 8 L12.5 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </div>
       <div class="terminal-frame">
-        <div id="terminal" class="terminal"></div>
+        <div id="terminals" class="terminals"></div>
+      </div>
+      <div class="search-bar" id="search-bar">
+        <svg class="sb-icon" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5 L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <input id="search-input" type="text" placeholder="Find in terminal" spellcheck="false" />
+        <span class="sb-count" id="search-count"></span>
+        <button class="sb-btn" id="search-prev" title="Previous (Shift+Enter)" aria-label="Previous">↑</button>
+        <button class="sb-btn" id="search-next" title="Next (Enter)" aria-label="Next">↓</button>
+        <button class="sb-btn sb-close" id="search-close" title="Close (Esc)" aria-label="Close">✕</button>
+      </div>
+
+      <div class="composer" id="composer">
+        <textarea id="composer-input" rows="1" spellcheck="false" placeholder="Write a message — Enter to send, Shift+Enter for newline"></textarea>
+        <button class="composer-send" id="composer-send" aria-label="Send" title="Send (Enter)">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 8 L13.5 3 L11 8 L13.5 13 Z" fill="currentColor"/><path d="M5 8 L11 8" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round"/></svg>
+        </button>
       </div>
     </section>
   </main>
@@ -43,6 +71,7 @@
   <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="../node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script src="../node_modules/@xterm/addon-search/lib/addon-search.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
