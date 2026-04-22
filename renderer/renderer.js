@@ -640,6 +640,129 @@ requestAnimationFrame(async () => {
   await startTabPty(first);
 });
 
+/* ============ Paste image + drop files ============ */
+function quoteIfSpace(p) {
+  if (!p) return p;
+  return /\s/.test(p) ? `"${p}"` : p;
+}
+
+function pasteIntoActiveTab(text) {
+  const t = activeTab();
+  if (!t) return;
+  t.xterm.focus();
+  t.xterm.paste(text);
+}
+
+async function savePastedBlob(blob, suggestedName) {
+  try {
+    const buf = await blob.arrayBuffer();
+    const res = await api.paste.saveFile(buf, blob.type, suggestedName);
+    if (res && res.ok) return res.path;
+  } catch {}
+  return null;
+}
+
+function insertIntoComposer(text) {
+  const ta = composerInput;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  ta.value = before + text + after;
+  const pos = start + text.length;
+  ta.selectionStart = ta.selectionEnd = pos;
+  autoGrow();
+  ta.focus();
+}
+
+async function handleClipboardPaste(target) {
+  const c = await api.paste.readClipboard();
+  if (!c) return false;
+
+  const deliver = target === 'composer' ? insertIntoComposer : pasteIntoActiveTab;
+
+  if (c.kind === 'files' && c.filePaths.length) {
+    toast(c.filePaths.length === 1 ? 'Copying file…' : `Copying ${c.filePaths.length} files…`);
+    const copied = await api.paste.copyPaths(c.filePaths);
+    if (copied.length) {
+      deliver(copied.map(quoteIfSpace).join(' '));
+      toast(copied.length === 1 ? 'Pasted file path' : `Pasted ${copied.length} paths`);
+      return true;
+    }
+    toast('Paste failed');
+    return false;
+  }
+
+  if (c.kind === 'image' && c.filePath) {
+    deliver(quoteIfSpace(c.filePath));
+    toast('Pasted image');
+    return true;
+  }
+
+  if (c.kind === 'text' && c.text) {
+    if (target === 'composer') {
+      insertIntoComposer(c.text);
+    } else {
+      const t = activeTab();
+      if (t) {
+        t.xterm.focus();
+        t.xterm.paste(c.text);
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
+window.addEventListener('keydown', async (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key !== 'v' && e.key !== 'V') return;
+  const tgt = document.activeElement;
+  if (tgt && tgt.id === 'search-input') return;
+  const target = (tgt && tgt.id === 'composer-input') ? 'composer' : 'terminal';
+  e.preventDefault();
+  e.stopPropagation();
+  await handleClipboardPaste(target);
+}, true);
+
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  document.body.classList.add('drag-over');
+});
+window.addEventListener('dragleave', (e) => {
+  if (e.target === document || e.target === document.body || !e.relatedTarget) {
+    document.body.classList.remove('drag-over');
+  }
+});
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  document.body.classList.remove('drag-over');
+  const files = [...(e.dataTransfer?.files || [])];
+  if (!files.length) return;
+
+  toast(files.length === 1 ? 'Copying file…' : `Copying ${files.length} files…`);
+  const sourcePaths = [];
+  const savedPaths = [];
+  for (const f of files) {
+    const p = api.paste.pathForFile(f);
+    if (p) {
+      sourcePaths.push(p);
+    } else {
+      const saved = await savePastedBlob(f, f.name);
+      if (saved) savedPaths.push(saved);
+    }
+  }
+  const copied = sourcePaths.length ? await api.paste.copyPaths(sourcePaths) : [];
+  const paths = [...copied, ...savedPaths];
+  if (paths.length) {
+    pasteIntoActiveTab(paths.map(quoteIfSpace).join(' '));
+    toast(paths.length === 1 ? 'Pasted file path' : `Pasted ${paths.length} paths`);
+  } else {
+    toast('Drop failed');
+  }
+});
+
 /* ============ Auto-update notifications ============ */
 api.updater.onAvailable((info) => {
   toast(`Update ${info?.version ? 'v' + info.version : ''} downloading…`);

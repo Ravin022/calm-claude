@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   window: {
@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld('api', {
   },
   env: {
     home: () => ipcRenderer.invoke('env:home')
+  },
+  paste: {
+    saveFile: (data, mime, suggestedName) =>
+      ipcRenderer.invoke('paste:saveFile', { data, mime, suggestedName }),
+    clipboardFilePaths: () => ipcRenderer.invoke('paste:clipboardFilePaths'),
+    copyPaths: (paths) => ipcRenderer.invoke('paste:copyPaths', paths),
+    readClipboard: () => ipcRenderer.invoke('clipboard:read'),
+    pathForFile: (file) => {
+      try { return webUtils.getPathForFile(file); }
+      catch { return null; }
+    }
   },
   updater: {
     check: () => ipcRenderer.invoke('update:check'),

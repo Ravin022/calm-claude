@@ -32,6 +32,65 @@ function getWindowIcon() {
 
 if (isWindows) app.setAppUserModelId('com.ravin.calmclaude');
 
+const PASTE_DIR = path.join(app.getPath('temp'), 'calm-claude-paste');
+const PASTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function ensurePasteDir() {
+  try { fs.mkdirSync(PASTE_DIR, { recursive: true }); } catch {}
+}
+function cleanupPasteDir() {
+  try {
+    if (!fs.existsSync(PASTE_DIR)) return;
+    const now = Date.now();
+    for (const name of fs.readdirSync(PASTE_DIR)) {
+      const full = path.join(PASTE_DIR, name);
+      try {
+        const st = fs.statSync(full);
+        if (now - st.mtimeMs > PASTE_MAX_AGE_MS) fs.unlinkSync(full);
+      } catch {}
+    }
+  } catch {}
+}
+
+function extFromMime(mime) {
+  const map = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/bmp': '.bmp',
+    'image/svg+xml': '.svg',
+    'image/avif': '.avif',
+    'image/heic': '.heic',
+    'application/pdf': '.pdf',
+    'application/msword': '.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'application/vnd.ms-excel': '.xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    'application/vnd.ms-powerpoint': '.ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+    'text/plain': '.txt',
+    'text/csv': '.csv',
+    'text/markdown': '.md',
+    'text/html': '.html',
+    'application/json': '.json',
+    'application/zip': '.zip'
+  };
+  return map[(mime || '').toLowerCase()] || '';
+}
+
+function extFromName(name) {
+  if (!name) return '';
+  const m = String(name).match(/(\.[a-zA-Z0-9]{1,6})$/);
+  return m ? m[1].toLowerCase() : '';
+}
+
+function safeBasename(name) {
+  if (!name) return '';
+  return String(name).replace(/[<>:"/\\|?*\x00-\x1f]+/g, '_').slice(0, 80);
+}
+
 function resolveClaudeExecutable() {
   const home = os.homedir();
   const candidates = isWindows
@@ -226,6 +285,8 @@ function setupAutoUpdater() {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
+  ensurePasteDir();
+  cleanupPasteDir();
   global.__splashShownAt = Date.now();
   createSplash();
   createWindow();
@@ -317,6 +378,215 @@ ipcMain.handle('dialog:pickFolder', async (_evt, startPath) => {
 });
 
 ipcMain.handle('env:home', () => os.homedir());
+
+ipcMain.handle('paste:saveFile', (_evt, { data, mime, suggestedName } = {}) => {
+  if (!data) return { ok: false, error: 'no data' };
+  ensurePasteDir();
+  const nameExt = extFromName(suggestedName);
+  const mimeExt = extFromMime(mime);
+  const ext = nameExt || mimeExt || '.bin';
+  const stamp = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  const baseRaw = suggestedName ? suggestedName.replace(/\.[^.]+$/, '') : 'pasted';
+  const base = safeBasename(baseRaw) || 'pasted';
+  const name = `${base}-${stamp}-${rand}${ext}`;
+  const full = path.join(PASTE_DIR, name);
+  try {
+    const buf = Buffer.from(data);
+    fs.writeFileSync(full, buf);
+    return { ok: true, path: full };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+function copyToPasteDir(srcPath) {
+  ensurePasteDir();
+  const base = path.basename(srcPath);
+  const ext = extFromName(base) || '';
+  const stem = base.replace(/\.[^.]+$/, '') || 'file';
+  const safe = safeBasename(stem) || 'file';
+  const stamp = Date.now();
+  const rand = Math.random().toString(36).slice(2, 6);
+  const dest = path.join(PASTE_DIR, `${safe}-${stamp}-${rand}${ext}`);
+  fs.copyFileSync(srcPath, dest);
+  return dest;
+}
+
+ipcMain.handle('paste:copyPaths', (_evt, paths) => {
+  if (!Array.isArray(paths)) return [];
+  const out = [];
+  for (const p of paths) {
+    try {
+      if (p && fs.existsSync(p) && fs.statSync(p).isFile()) {
+        out.push(copyToPasteDir(p));
+      }
+    } catch {}
+  }
+  return out;
+});
+
+ipcMain.handle('clipboard:read', () => {
+  const { clipboard } = require('electron');
+  const result = { kind: 'none', text: null, filePath: null, filePaths: [], debug: [] };
+
+  function parseDropfiles(buf) {
+    if (!buf || buf.length < 22) return [];
+    try {
+      const pFiles = buf.readUInt32LE(0);
+      const fWide = buf.readUInt32LE(16);
+      if (pFiles < 20 || pFiles >= buf.length) return [];
+      const paths = [];
+      if (fWide) {
+        let i = pFiles, start = i;
+        while (i + 1 < buf.length) {
+          if (buf.readUInt16LE(i) === 0) {
+            if (i > start) paths.push(buf.slice(start, i).toString('utf16le'));
+            else break;
+            i += 2; start = i;
+          } else i += 2;
+        }
+      } else {
+        let i = pFiles, start = i;
+        while (i < buf.length) {
+          if (buf[i] === 0) {
+            if (i > start) paths.push(buf.slice(start, i).toString('ascii'));
+            else break;
+            i += 1; start = i;
+          } else i += 1;
+        }
+      }
+      return paths.filter(Boolean);
+    } catch { return []; }
+  }
+
+  try {
+    if (process.platform === 'win32') {
+      const candidates = ['CF_HDROP', 'FileNameW', 'FileName', 'FileGroupDescriptorW'];
+      for (const fmt of candidates) {
+        try {
+          const buf = clipboard.readBuffer(fmt);
+          result.debug.push(`${fmt}=${buf?.length || 0}`);
+          if (buf && buf.length > 0) {
+            if (fmt === 'CF_HDROP') {
+              const paths = parseDropfiles(buf);
+              if (paths.length) {
+                result.kind = 'files';
+                result.filePaths = paths;
+                return result;
+              }
+            } else if (fmt === 'FileNameW') {
+              const s = buf.toString('utf16le').replace(/\0+$/, '');
+              if (s) { result.kind = 'files'; result.filePaths = [s]; return result; }
+            } else if (fmt === 'FileName') {
+              const s = buf.toString('ascii').replace(/\0+$/, '');
+              if (s) { result.kind = 'files'; result.filePaths = [s]; return result; }
+            }
+          }
+        } catch (e) { result.debug.push(`${fmt}:err`); }
+      }
+
+      try {
+        const uriList = clipboard.read('text/uri-list');
+        result.debug.push(`uri-list.len=${uriList?.length || 0}`);
+        if (uriList) {
+          const paths = uriList.split(/\r?\n/)
+            .map(s => s.trim())
+            .filter(s => s && !s.startsWith('#'))
+            .map(s => {
+              if (s.startsWith('file:///')) {
+                try { return decodeURIComponent(s.replace(/^file:\/\/\//, '').replace(/\//g, '\\')); }
+                catch { return null; }
+              }
+              return s;
+            })
+            .filter(Boolean);
+          if (paths.length) { result.kind = 'files'; result.filePaths = paths; return result; }
+        }
+      } catch { result.debug.push('uri-list:err'); }
+    }
+
+    try {
+      const img = clipboard.readImage();
+      const empty = img.isEmpty();
+      const size = empty ? { width: 0, height: 0 } : img.getSize();
+      result.debug.push(`img=${size.width}x${size.height}`);
+      if (!empty && size.width > 0 && size.height > 0) {
+        const buf = img.toPNG();
+        if (buf && buf.length > 100) {
+          ensurePasteDir();
+          const name = `pasted-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+          const full = path.join(PASTE_DIR, name);
+          fs.writeFileSync(full, buf);
+          result.kind = 'image';
+          result.filePath = full;
+          return result;
+        }
+      }
+    } catch (e) { result.debug.push(`img:err=${e.message}`); }
+
+    try {
+      const text = clipboard.readText();
+      result.debug.push(`text.len=${text?.length || 0}`);
+      if (text) { result.kind = 'text'; result.text = text; }
+    } catch (e) { result.debug.push(`text:err=${e.message}`); }
+  } catch (e) {
+    result.debug.push(`outer:err=${e.message}`);
+  }
+
+  return result;
+});
+
+ipcMain.handle('paste:clipboardFilePaths', () => {
+  try {
+    const { clipboard } = require('electron');
+    if (process.platform !== 'win32') return [];
+    const formats = clipboard.availableFormats();
+    if (!formats.includes('CF_HDROP') && !formats.includes('text/uri-list')) return [];
+    const buf = clipboard.readBuffer('CF_HDROP');
+    if (!buf || buf.length < 20) return [];
+    const pFiles = buf.readUInt32LE(0);
+    const fWide = buf.readUInt32LE(16);
+    const paths = [];
+    if (fWide) {
+      let i = pFiles;
+      let start = i;
+      while (i + 1 < buf.length) {
+        const code = buf.readUInt16LE(i);
+        if (code === 0) {
+          if (i > start) {
+            paths.push(buf.slice(start, i).toString('utf16le'));
+          } else {
+            break;
+          }
+          i += 2;
+          start = i;
+        } else {
+          i += 2;
+        }
+      }
+    } else {
+      let i = pFiles;
+      let start = i;
+      while (i < buf.length) {
+        if (buf[i] === 0) {
+          if (i > start) {
+            paths.push(buf.slice(start, i).toString('ascii'));
+          } else {
+            break;
+          }
+          i += 1;
+          start = i;
+        } else {
+          i += 1;
+        }
+      }
+    }
+    return paths.filter(Boolean);
+  } catch {
+    return [];
+  }
+});
 
 ipcMain.handle('update:install', () => {
   if (autoUpdater) {

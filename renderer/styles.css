@@ -507,6 +507,27 @@ body[data-theme="dark"] .tab-close:hover { background: rgba(255,255,255,0.1); }
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ============ Drop indicator ============ */
+body::after {
+  content: "Drop to attach";
+  position: fixed;
+  inset: 10px;
+  border: 2px dashed var(--accent);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 16px; font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 500;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity 0.15s ease;
+}
+body.drag-over::after { opacity: 1; }
+
 /* ============ Search bar ============ */
 .search-bar {
   display: none;
