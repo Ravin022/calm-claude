@@ -442,6 +442,23 @@ $('#theme-toggle').addEventListener('click', () => {
   toast(next === 'dark' ? 'Dark' : 'Light');
 });
 
+/* ============ Ambient art toggle ============ */
+const ART_KEY = 'calm-claude:art';
+function getArt() {
+  return localStorage.getItem(ART_KEY) === '1';
+}
+function applyArt(on) {
+  document.body.classList.toggle('ambient-art', on);
+  $('#art-toggle').classList.toggle('active', on);
+  localStorage.setItem(ART_KEY, on ? '1' : '0');
+}
+applyArt(getArt());
+$('#art-toggle').addEventListener('click', () => {
+  const next = !getArt();
+  applyArt(next);
+  toast(next ? 'Ambient art on' : 'Ambient art off');
+});
+
 /* ============ Composer ============ */
 const COMPOSER_KEY = 'calm-claude:composer';
 const composerEl = $('#composer');
@@ -582,6 +599,10 @@ window.addEventListener('keydown', (e) => {
   if (mod && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
     e.preventDefault();
     composerToggleBtn.click();
+  }
+  if (mod && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
+    e.preventDefault();
+    $('#art-toggle').click();
   }
   if (mod && !e.shiftKey && (e.key === 'f' || e.key === 'F')) {
     e.preventDefault();

@@ -94,13 +94,79 @@ button { font-family: inherit; cursor: default; border: none; background: none; 
 
 /* ============ Ambient background ============ */
 .ambient {
-  position: fixed; inset: 0; z-index: -1;
+  position: fixed; inset: 0; z-index: -1; overflow: hidden;
   background:
     radial-gradient(1200px 700px at 8% -10%, var(--bg-warm) 0%, transparent 60%),
     radial-gradient(900px 700px at 100% 10%, var(--bg-pink) 0%, transparent 55%),
     radial-gradient(1100px 800px at 50% 110%, var(--bg-cool) 0%, transparent 55%),
     linear-gradient(180deg, var(--bg-base) 0%, var(--bg-base-end) 100%);
   transition: background 0.3s ease;
+}
+
+/* ============ Ambient art mode ============ */
+body.ambient-art {
+  --ambient-art: url("assets/ambient-light.png");
+  --ambient-art-opacity: 0.72;
+  --frame-art: url("assets/splash-light.png");
+  --frame-art-opacity: 0.2;
+  --panel-strong: rgba(255, 252, 248, 0.78);
+}
+body.ambient-art[data-theme="dark"] {
+  --ambient-art: url("assets/ambient-dark.png");
+  --ambient-art-opacity: 0.58;
+  --frame-art: url("assets/splash-dark.png");
+  --frame-art-opacity: 0.22;
+  --panel-strong: rgba(255, 250, 246, 0.05);
+}
+body.ambient-art .ambient {
+  background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-base-end) 100%);
+}
+body.ambient-art .ambient::before,
+body.ambient-art .ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+body.ambient-art .ambient::before {
+  inset: -2%;
+  background-image: var(--ambient-art);
+  background-size: cover;
+  background-position: center 44%;
+  opacity: var(--ambient-art-opacity);
+  transform: scale(1.04);
+  filter: saturate(1.04);
+  transition: opacity 0.3s ease;
+}
+body.ambient-art .ambient::after {
+  background:
+    radial-gradient(1200px 700px at 8% -10%, color-mix(in srgb, var(--bg-warm) 82%, transparent) 0%, transparent 60%),
+    radial-gradient(900px 700px at 100% 10%, color-mix(in srgb, var(--bg-pink) 72%, transparent) 0%, transparent 55%),
+    radial-gradient(1100px 800px at 50% 110%, color-mix(in srgb, var(--bg-cool) 72%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-base) 28%, transparent) 0%, color-mix(in srgb, var(--bg-base-end) 36%, transparent) 100%);
+}
+
+body.ambient-art .terminal-frame { isolation: isolate; }
+body.ambient-art .terminal-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 248, 0.08) 0%, rgba(255, 252, 248, 0) 30%),
+    var(--frame-art) center center / cover no-repeat;
+  opacity: var(--frame-art-opacity);
+  transform: scale(1.02);
+  -webkit-mask-image: radial-gradient(circle at 50% 58%, transparent 0 18%, rgba(0, 0, 0, 0.42) 38%, rgba(0, 0, 0, 0.84) 62%, #000 100%);
+  mask-image: radial-gradient(circle at 50% 58%, transparent 0 18%, rgba(0, 0, 0, 0.42) 38%, rgba(0, 0, 0, 0.84) 62%, #000 100%);
+  pointer-events: none;
+}
+body.ambient-art .terminal { position: relative; z-index: 1; }
+
+.art-toggle.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent-soft);
 }
 
 /* ============ Titlebar ============ */
