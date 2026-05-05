@@ -169,6 +169,31 @@ body.ambient-art .terminal { position: relative; z-index: 1; }
   border-color: var(--accent-soft);
 }
 
+.notif-toggle .bell-on  { display: block; }
+.notif-toggle .bell-off { display: none; }
+.notif-toggle.active .bell-on  { display: block; }
+.notif-toggle.active .bell-off { display: none; }
+.notif-toggle:not(.active) .bell-on  { display: none; }
+.notif-toggle:not(.active) .bell-off { display: block; }
+.notif-toggle.active {
+  color: var(--accent-strong);
+}
+
+.perm-toggle .shield-off { display: none; }
+.perm-toggle .shield-on  { display: block; }
+.perm-toggle.active .shield-off { display: block; }
+.perm-toggle.active .shield-on  { display: none; }
+.perm-toggle.active {
+  background: rgba(217, 127, 106, 0.15);
+  color: #c44a37;
+  border-color: rgba(217, 127, 106, 0.35);
+}
+body[data-theme="dark"] .perm-toggle.active {
+  background: rgba(229, 142, 122, 0.15);
+  color: #f59e8a;
+  border-color: rgba(229, 142, 122, 0.35);
+}
+
 /* ============ Titlebar ============ */
 .titlebar {
   position: fixed; top: 0; left: 0; right: 0; height: var(--titlebar-h);
@@ -412,6 +437,40 @@ body.win-focused .tl-max   { background: var(--tl-green); }
   color: var(--text);
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
+.tab .tab-status {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-faint);
+  opacity: 0.55;
+  transition: background 0.25s ease, opacity 0.25s ease;
+}
+.tab.tab-state-working .tab-status {
+  background: #6b8e4a;
+  opacity: 1;
+  animation: tabPulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(107, 142, 74, 0.5);
+}
+.tab.tab-state-waiting .tab-status {
+  background: var(--accent);
+  opacity: 1;
+}
+.tab.tab-state-idle .tab-status {
+  background: var(--text-faint);
+  opacity: 0.45;
+}
+body[data-theme="dark"] .tab.tab-state-working .tab-status {
+  background: #a8c78a;
+  box-shadow: 0 0 8px rgba(168, 199, 138, 0.45);
+}
+body[data-theme="dark"] .tab.tab-state-waiting .tab-status {
+  background: var(--accent-strong);
+}
+@keyframes tabPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(0.65); opacity: 0.55; }
+}
+
 .tab .tab-title {
   flex: 1;
   min-width: 0;
@@ -506,6 +565,194 @@ body[data-theme="dark"] .tab-close:hover { background: rgba(255,255,255,0.1); }
   z-index: 400;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============ Focus mode ============ */
+.focus-vignette {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  /* Light theme: very gentle warm haze at corners — harmonizes with cream */
+  background:
+    radial-gradient(140% 110% at 50% 50%, transparent 55%, rgba(166, 120, 71, 0.05) 78%, rgba(140, 95, 60, 0.10) 100%);
+  transition: opacity 0.7s ease;
+}
+body[data-theme="dark"] .focus-vignette {
+  background:
+    radial-gradient(120% 90% at 50% 50%, transparent 36%, rgba(0, 0, 0, 0.32) 68%, rgba(0, 0, 0, 0.6) 100%);
+}
+body.focus-mode .focus-vignette { opacity: 1; }
+
+body.focus-mode .titlebar {
+  background: transparent;
+  border-bottom-color: transparent;
+  transition: opacity 0.5s ease, background 0.5s ease;
+}
+body.focus-mode .titlebar > *:not(.traffic-lights):not(.title):not(.titlebar-right) {
+  opacity: 0.2;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+body.focus-mode .titlebar-right > *:not(.focus-toggle) {
+  opacity: 0.18;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+body.focus-mode .titlebar-right > .focus-toggle {
+  opacity: 0.45;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
+}
+body.focus-mode .titlebar-right > .focus-toggle:hover {
+  opacity: 1;
+}
+body.focus-mode .titlebar > .title {
+  opacity: 0.4;
+}
+body.focus-mode.focus-reveal .titlebar > *,
+body.focus-mode.focus-reveal .titlebar-right > * {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.focus-mode .tab-bar {
+  max-height: 0;
+  min-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  overflow: hidden;
+  transition: max-height 0.55s ease, opacity 0.45s ease, min-height 0.55s ease;
+}
+body.focus-mode.focus-reveal .tab-bar {
+  max-height: 40px;
+  min-height: 30px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.focus-mode .terminal-frame {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 0 40px -10px rgba(200, 154, 107, 0.14),
+    0 14px 36px -16px rgba(80, 60, 90, 0.18);
+  animation: focusBreathe 5.5s ease-in-out infinite;
+}
+body.focus-mode[data-theme="dark"] .terminal-frame {
+  box-shadow:
+    0 0 0 1px rgba(232, 190, 138, 0.10) inset,
+    0 0 70px -16px rgba(232, 190, 138, 0.28),
+    0 22px 60px -18px rgba(0, 0, 0, 0.6);
+}
+@keyframes focusBreathe {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.04); }
+}
+
+.focus-toggle.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent-soft);
+}
+
+/* ============ Calm notification banner ============ */
+.notif-stack {
+  position: fixed;
+  top: calc(var(--titlebar-h) + 12px);
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 400;
+  pointer-events: none;
+  max-width: 320px;
+}
+.notif-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px 10px 14px;
+  background: var(--panel-strong);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 14px 36px -16px rgba(80, 60, 90, 0.35),
+    0 4px 10px -4px rgba(80, 60, 90, 0.18);
+  backdrop-filter: blur(20px) saturate(1.1);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  font-size: 12px;
+  pointer-events: auto;
+  cursor: default;
+  opacity: 0;
+  transform: translate(14px, -6px) scale(0.96);
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  position: relative;
+}
+.notif-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120px 80px at 0% 50%, var(--accent-soft), transparent 70%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.notif-banner.show {
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+}
+body[data-theme="dark"] .notif-banner {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.05) inset,
+    0 18px 40px -14px rgba(0, 0, 0, 0.7),
+    0 4px 10px -4px rgba(0, 0, 0, 0.45);
+}
+.notif-banner > * { position: relative; z-index: 1; }
+.notif-banner .nb-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: nbBreathe 2.2s ease-in-out infinite;
+}
+@keyframes nbBreathe {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(0.78); opacity: 0.7; }
+}
+.notif-banner .nb-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.notif-banner .nb-title {
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.notif-banner .nb-sub {
+  color: var(--text-soft);
+  font-size: 11px;
+  margin-top: 1px;
+}
+.notif-banner .nb-close {
+  width: 22px; height: 22px;
+  flex: none;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint);
+  font-size: 14px; line-height: 1;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.notif-banner .nb-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
 
 /* ============ Drop indicator ============ */
 body::after {

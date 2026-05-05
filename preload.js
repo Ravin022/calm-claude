@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('api', {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    isFocused: () => ipcRenderer.invoke('window:isFocused'),
+    flash: () => ipcRenderer.invoke('window:flash'),
+    focus: () => ipcRenderer.invoke('window:focus'),
     onState: (cb) => ipcRenderer.on('window:state', (_e, s) => cb(s)),
     onFocus: (cb) => ipcRenderer.on('window:focus', (_e, f) => cb(f))
   },

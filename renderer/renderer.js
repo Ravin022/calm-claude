@@ -5,7 +5,9 @@ $('#tl-close').addEventListener('click', () => api.window.close());
 $('#tl-min').addEventListener('click', () => api.window.minimize());
 $('#tl-max').addEventListener('click', () => api.window.maximize());
 
+let windowFocused = true;
 api.window.onFocus((focused) => {
+  windowFocused = !!focused;
   document.body.classList.toggle('win-focused', !!focused);
 });
 api.window.isMaximized().then(() => {
@@ -196,11 +198,144 @@ function createTab(cwd) {
   const tab = {
     id, cwd, xterm, fitAddon, searchAddon, slot,
     title: basename(cwd),
-    started: false
+    started: false,
+    state: 'idle',
+    lastDataAt: 0
   };
   tabs.set(id, tab);
   return tab;
 }
+
+const MIN_WORKING_MS_FOR_NOTIFY = 3000;
+
+function setTabState(tab, state) {
+  if (!tab || tab.state === state) return;
+  const prevState = tab.state;
+  tab.state = state;
+  const btn = tabsEl.querySelector(`.tab[data-tab-id="${tab.id}"]`);
+  if (btn) {
+    btn.classList.remove('tab-state-working', 'tab-state-waiting', 'tab-state-idle');
+    btn.classList.add(`tab-state-${state}`);
+  }
+
+  if (state === 'working' && prevState !== 'working') {
+    tab.workingSince = Date.now();
+  }
+  if (prevState === 'working' && state === 'waiting') {
+    const dur = tab.workingSince ? Date.now() - tab.workingSince : 0;
+    tab.workingSince = 0;
+    maybeNotifyTabReady(tab, dur);
+  }
+}
+
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch { _audioCtx = null; }
+  }
+  if (_audioCtx && _audioCtx.state === 'suspended') {
+    _audioCtx.resume().catch(() => {});
+  }
+  return _audioCtx;
+}
+
+function playChime() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const notes = [
+    { freq: 587.33, delay: 0.00, gain: 0.10 },
+    { freq: 880.00, delay: 0.16, gain: 0.08 }
+  ];
+  for (const { freq, delay, gain: peak } of notes) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const t0 = now + delay;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak, t0 + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.8);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 1.9);
+  }
+}
+
+let notifStack = null;
+function ensureNotifStack() {
+  if (notifStack) return notifStack;
+  notifStack = document.createElement('div');
+  notifStack.className = 'notif-stack';
+  document.body.appendChild(notifStack);
+  return notifStack;
+}
+
+function showCalmBanner(tab) {
+  const stack = ensureNotifStack();
+  const el = document.createElement('div');
+  el.className = 'notif-banner';
+  el.innerHTML = `
+    <span class="nb-dot" aria-hidden="true"></span>
+    <div class="nb-text">
+      <span class="nb-title">${escapeHtml(tab.title || 'Session')}</span>
+      <span class="nb-sub">Waiting for input</span>
+    </div>
+    <button class="nb-close" aria-label="Dismiss">×</button>
+  `;
+  let dismissed = false;
+  function dismiss() {
+    if (dismissed) return;
+    dismissed = true;
+    el.classList.remove('show');
+    setTimeout(() => { try { el.remove(); } catch {} }, 380);
+  }
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.nb-close')) { dismiss(); return; }
+    api.window.focus();
+    activateTab(tab.id);
+    dismiss();
+  });
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(dismiss, 5000);
+}
+
+function maybeNotifyTabReady(tab, workingDurationMs) {
+  if (!getNotifEnabled()) return;
+  if (workingDurationMs < MIN_WORKING_MS_FOR_NOTIFY) return;
+  const isCurrent = windowFocused && tab.id === activeTabId;
+  if (isCurrent) return;
+
+  playChime();
+  showCalmBanner(tab);
+
+  if (!windowFocused) {
+    api.window.flash();
+    try {
+      const n = new Notification('Calm Claude', {
+        body: `${tab.title || 'Session'} is waiting for input`,
+        silent: true
+      });
+      n.onclick = () => {
+        api.window.focus();
+        activateTab(tab.id);
+        try { n.close(); } catch {}
+      };
+    } catch {}
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const t of tabs.values()) {
+    if (!t.lastDataAt) continue;
+    const elapsed = now - t.lastDataAt;
+    if (elapsed > 30000) setTabState(t, 'idle');
+    else if (elapsed > 1500) setTabState(t, 'waiting');
+  }
+}, 500);
 
 function fitActive() {
   const t = activeTab();
@@ -252,9 +387,10 @@ function renderTabBar() {
   tabsEl.innerHTML = '';
   for (const t of tabs.values()) {
     const btn = document.createElement('button');
-    btn.className = 'tab' + (t.id === activeTabId ? ' active' : '');
+    const stateClass = `tab-state-${t.state || 'idle'}`;
+    btn.className = `tab ${stateClass}` + (t.id === activeTabId ? ' active' : '');
     btn.dataset.tabId = t.id;
-    btn.innerHTML = `<span class="tab-title">${escapeHtml(t.title || basename(t.cwd))}</span><span class="tab-close" aria-label="Close tab">×</span>`;
+    btn.innerHTML = `<span class="tab-status" aria-hidden="true"></span><span class="tab-title">${escapeHtml(t.title || basename(t.cwd))}</span><span class="tab-close" aria-label="Close tab">×</span>`;
     btn.addEventListener('click', (e) => {
       if (e.target.closest('.tab-close')) {
         closeTab(t.id);
@@ -270,7 +406,13 @@ function renderTabBar() {
 }
 
 async function startTabPty(tab) {
-  const res = await api.pty.start({ tabId: tab.id, cols: tab.xterm.cols, rows: tab.xterm.rows, cwd: tab.cwd });
+  const res = await api.pty.start({
+    tabId: tab.id,
+    cols: tab.xterm.cols,
+    rows: tab.xterm.rows,
+    cwd: tab.cwd,
+    skipPermissions: getSkipPerm()
+  });
   tab.started = !!(res && res.ok);
   if (!tab.started) {
     tab.xterm.write(`\r\n\x1b[31mCould not launch claude.\x1b[0m\r\n`);
@@ -320,13 +462,18 @@ async function pasteClipboard(xt) {
 /* ============ PTY wire-up ============ */
 api.pty.onData(({ tabId, data }) => {
   const t = tabs.get(tabId);
-  if (t) t.xterm.write(data);
+  if (t) {
+    t.xterm.write(data);
+    t.lastDataAt = Date.now();
+    setTabState(t, 'working');
+  }
 });
 
 api.pty.onExit(({ tabId, exitCode }) => {
   const t = tabs.get(tabId);
   if (t) {
     t.xterm.write(`\r\n\x1b[2m[session ended${exitCode != null ? ` · exit ${exitCode}` : ''}]\x1b[0m\r\n`);
+    setTabState(t, 'idle');
   }
 });
 
@@ -440,6 +587,101 @@ $('#theme-toggle').addEventListener('click', () => {
   const next = getTheme() === 'dark' ? 'light' : 'dark';
   applyTheme(next);
   toast(next === 'dark' ? 'Dark' : 'Light');
+});
+
+/* ============ Focus mode ============ */
+const FOCUS_KEY = 'calm-claude:focus';
+function getFocusMode() { return localStorage.getItem(FOCUS_KEY) === '1'; }
+
+let focusRevealTimer = null;
+function applyFocusMode(on) {
+  document.body.classList.toggle('focus-mode', on);
+  $('#focus-toggle').classList.toggle('active', on);
+  localStorage.setItem(FOCUS_KEY, on ? '1' : '0');
+  if (!on) {
+    document.body.classList.remove('focus-reveal');
+    clearTimeout(focusRevealTimer);
+  }
+  setTimeout(fitActive, 600);
+}
+
+function temporarilyReveal() {
+  if (!getFocusMode()) return;
+  document.body.classList.add('focus-reveal');
+  clearTimeout(focusRevealTimer);
+  focusRevealTimer = setTimeout(() => {
+    document.body.classList.remove('focus-reveal');
+  }, 1200);
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (!getFocusMode()) return;
+  if (e.clientY < 60) {
+    document.body.classList.add('focus-reveal');
+    clearTimeout(focusRevealTimer);
+  } else if (document.body.classList.contains('focus-reveal')) {
+    clearTimeout(focusRevealTimer);
+    focusRevealTimer = setTimeout(() => {
+      document.body.classList.remove('focus-reveal');
+    }, 600);
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && getFocusMode()) {
+    if (e.target && (e.target.id === 'composer-input' || e.target.id === 'search-input')) return;
+    applyFocusMode(false);
+    toast('Focus mode off');
+  }
+});
+
+applyFocusMode(getFocusMode());
+$('#focus-toggle').addEventListener('click', () => {
+  const next = !getFocusMode();
+  applyFocusMode(next);
+  toast(next ? 'Focus mode on' : 'Focus mode off');
+});
+
+/* ============ Notifications toggle ============ */
+const NOTIF_KEY = 'calm-claude:notif';
+function getNotifEnabled() {
+  const v = localStorage.getItem(NOTIF_KEY);
+  return v === null ? true : v === '1';
+}
+function applyNotifToggle(on) {
+  $('#notif-toggle').classList.toggle('active', on);
+  localStorage.setItem(NOTIF_KEY, on ? '1' : '0');
+}
+applyNotifToggle(getNotifEnabled());
+
+$('#notif-toggle').addEventListener('click', () => {
+  const next = !getNotifEnabled();
+  applyNotifToggle(next);
+  toast(next ? 'Notifications on' : 'Notifications off');
+});
+
+/* ============ Permission bypass toggle ============ */
+const PERM_KEY = 'calm-claude:skipPerm';
+function getSkipPerm() {
+  return localStorage.getItem(PERM_KEY) === '1';
+}
+function applyPermToggle(on) {
+  $('#perm-toggle').classList.toggle('active', on);
+  localStorage.setItem(PERM_KEY, on ? '1' : '0');
+}
+applyPermToggle(getSkipPerm());
+
+$('#perm-toggle').addEventListener('click', async () => {
+  const next = !getSkipPerm();
+  applyPermToggle(next);
+  toast(next ? 'Permissions bypassed — be careful' : 'Permissions back on');
+  const t = activeTab();
+  if (t) {
+    await api.pty.kill(t.id);
+    t.xterm.clear();
+    t.xterm.reset();
+    setTimeout(() => startTabPty(t), 120);
+  }
 });
 
 /* ============ Ambient art toggle ============ */

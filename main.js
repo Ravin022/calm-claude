@@ -140,8 +140,12 @@ function resolveGitBashPath() {
   return null;
 }
 
-function spawnClaudePty(cols, rows, cwd) {
+function spawnClaudePty(cols, rows, cwd, opts = {}) {
   const command = resolveClaudeExecutable();
+  const args = [];
+  if (opts.skipPermissions) {
+    args.push('--dangerously-skip-permissions');
+  }
   const env = {
     ...process.env,
     TERM: 'xterm-256color',
@@ -162,7 +166,7 @@ function spawnClaudePty(cols, rows, cwd) {
     }
   }
 
-  return pty.spawn(command, [], {
+  return pty.spawn(command, args, {
     name: 'xterm-256color',
     cols: cols || 120,
     rows: rows || 30,
@@ -245,7 +249,10 @@ function createWindow() {
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:state', { maximized: true }));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:state', { maximized: false }));
-  mainWindow.on('focus', () => mainWindow.webContents.send('window:focus', true));
+  mainWindow.on('focus', () => {
+    try { mainWindow.flashFrame(false); } catch {}
+    mainWindow.webContents.send('window:focus', true);
+  });
   mainWindow.on('blur', () => mainWindow.webContents.send('window:focus', false));
 
   mainWindow.on('closed', () => {
@@ -313,8 +320,22 @@ ipcMain.handle('window:maximize', () => {
 });
 ipcMain.handle('window:close', () => mainWindow?.close());
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
+ipcMain.handle('window:isFocused', () => mainWindow?.isFocused() ?? false);
+ipcMain.handle('window:flash', () => {
+  if (mainWindow && !mainWindow.isFocused()) {
+    try { mainWindow.flashFrame(true); } catch {}
+  }
+});
+ipcMain.handle('window:focus', () => {
+  if (!mainWindow) return;
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.flashFrame(false);
+  } catch {}
+});
 
-ipcMain.handle('pty:start', (_evt, { tabId, cols, rows, cwd } = {}) => {
+ipcMain.handle('pty:start', (_evt, { tabId, cols, rows, cwd, skipPermissions } = {}) => {
   if (!tabId) return { ok: false, error: 'tabId required' };
 
   if (ptyLoadError) {
@@ -331,7 +352,7 @@ ipcMain.handle('pty:start', (_evt, { tabId, cols, rows, cwd } = {}) => {
 
   let p;
   try {
-    p = spawnClaudePty(cols, rows, cwd);
+    p = spawnClaudePty(cols, rows, cwd, { skipPermissions });
   } catch (err) {
     const msg = `\r\n\x1b[31mFailed to start claude: ${err.message}\x1b[0m\r\n\x1b[2mIs the claude CLI installed and on PATH?\x1b[0m\r\n`;
     mainWindow?.webContents.send('pty:data', { tabId, data: msg });
